@@ -4,6 +4,6 @@
 
 struct mnistFileInfo
 {
-	string labelFile;
-	string imageFile;
+	std::filesystem::path labelFile;
+	std::filesystem::path imageFile;
 };

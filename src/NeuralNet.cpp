@@ -131,19 +131,19 @@ void NeuralNet::verifyFiles()
 {
 	std::unique_lock lock(this->accessMutex);
 
-	string localTrainLblDataFP = string(this->TrainingData.labelFile);
+	string localTrainLblDataFP = this->TrainingData.labelFile.string();
 	correctFilePathForTarget(localTrainLblDataFP);
 	auto lcltrainLblDataFP = FileObjInputHandle(HEADER_NOT_NEEDED, localTrainLblDataFP, BIN_FILE_MODE);
 
-	string localTrainImgDataFP = string(this->TrainingData.imageFile);
+	string localTrainImgDataFP = this->TrainingData.imageFile.string();
 	correctFilePathForTarget(localTrainImgDataFP);
 	auto lcltrainImgDataFP = FileObjInputHandle(HEADER_NOT_NEEDED, localTrainImgDataFP, BIN_FILE_MODE);
 
-	string localTestLblDataFP = string(this->TestData.labelFile);
+	string localTestLblDataFP = this->TestData.labelFile.string();
 	correctFilePathForTarget(localTestLblDataFP);
 	auto lcltestLblDataFP = FileObjInputHandle(HEADER_NOT_NEEDED, localTestLblDataFP, BIN_FILE_MODE);
 
-	string localTestImgDataFP = string(this->TestData.imageFile);
+	string localTestImgDataFP = this->TestData.imageFile.string();
 	correctFilePathForTarget(localTestImgDataFP);
 	auto lcltestImgDataFP = FileObjInputHandle(HEADER_NOT_NEEDED, localTestImgDataFP, BIN_FILE_MODE);
 
@@ -215,14 +215,14 @@ void NeuralNet::verifyFiles()
 }
 
 
-string NeuralNet::getFileName() const
+std::filesystem::path NeuralNet::getFileName() const
 {
 	std::shared_lock lock(this->accessMutex);
 	return (this->FileName);
 }
 
 
-void NeuralNet::setFileName(const string& newName)
+void NeuralNet::setFileName(const std::filesystem::path& newName)
 {
 	std::unique_lock lock(this->accessMutex);
 	this->FileName = newName;
@@ -357,13 +357,20 @@ void NeuralNet::setRandDOutputs()
 void NeuralNet::setTrainingParams(const size_t& batchsz, const int& numbatches, const double& eta)
 {
 	std::unique_lock lock(this->accessMutex);
-	if (batchsz >= AP_MinBatchSize && batchsz <= AP_MaxBatchSize)
+	if (isValidBatchSize(batchsz))
 		this->BatchSize = batchsz;
+	else
+		ErrorHandler::SoftError("setTrainingParams invalid batchsz"); //note these should probably be handled differently if this ever happens
 
-	if (eta >= AP_MinEta &&eta <= AP_MaxEta)
+	if (isValidBatchCount(numbatches))
+		this->NumBatches = numbatches;
+	else
+		ErrorHandler::SoftError("setTrainingParams invalid numbatches"); //note these should probably be handled differently if this ever happens
+
+	if (isValidEta(eta))
 		this->Eta = eta;
-
-	this->NumBatches = numbatches;
+	else
+		ErrorHandler::SoftError("setTrainingParams invalid eta"); //note these should probably be handled differently if this ever happens
 }
 
 void NeuralNet::updateNetwork()
@@ -491,17 +498,18 @@ void NeuralNet::addWBCosts()
 	NN_DEBUG_END_SUSPEND_RECORD(MatrixAPI::recordAfterOp(this->WBCostGrad));
 }
 
-void NeuralNet::avgWBCosts(const size_t& numTrainings)
+void NeuralNet::avgWBCosts(const size_t& numTrainings, const double overrideEta)
 {
 	std::unique_lock lock(this->accessMutex);
 	double nT = static_cast<double>(numTrainings);
 	double learning = 0.0;
+	double eta = (isValidEta(overrideEta) ? overrideEta : this->Eta);
 	
 #if (FP_EXCEPTIONS_ENABLED)
     try 
 #endif
 	{
-		learning = (-1 * this->Eta / nT);
+		learning = (-1 * eta / nT);
 	} 
 #if (FP_EXCEPTIONS_ENABLED)
     catch (...) {
@@ -666,10 +674,10 @@ void NeuralNet::saveFile() const
 	std::shared_lock lock(this->accessMutex);
 	auto FP = FileObjOutputOverwriteHandle(HEADER_CLASS_SETUP(&NeuralNet::headerSetupWriteCallback), this->FileName, BIN_FILE_MODE );
 
-	FP << this->TrainingData.labelFile << '\n';
-	FP << this->TrainingData.imageFile << '\n';
-	FP << this->TestData.labelFile << '\n';
-	FP << this->TestData.imageFile << '\n';
+	FP << this->TrainingData.labelFile.string() << '\n';
+	FP << this->TrainingData.imageFile.string() << '\n';
+	FP << this->TestData.labelFile.string() << '\n';
+	FP << this->TestData.imageFile.string() << '\n';
 
 	this->DesiredOutputs.WriteToFile(FP);
 	this->InputLayer.WriteToFile(FP);
@@ -697,7 +705,7 @@ void NeuralNet::saveFile() const
 void NeuralNet::readFile()
 {
 
-	string localFilePath = string(this->FileName);
+	string localFilePath = this->FileName.string();
 	correctFilePathForTarget(localFilePath);
 
 	auto FP = FileObjInputHandle(HEADER_CLASS_SETUP(&NeuralNet::headerSetupReadCallback), localFilePath, BIN_FILE_MODE);
@@ -705,14 +713,14 @@ void NeuralNet::readFile()
 	{
 		std::unique_lock lock(this->accessMutex);
 
-		std::getline(FP, this->TrainingData.labelFile);
-		std::getline(FP, this->TrainingData.imageFile);
-		std::getline(FP, this->TestData.labelFile);
-		std::getline(FP, this->TestData.imageFile);
+		string tmp;
+		std::getline(FP, tmp); this->TrainingData.labelFile = tmp;
+		std::getline(FP, tmp); this->TrainingData.imageFile = tmp;
+		std::getline(FP, tmp); this->TestData.labelFile = tmp;
+		std::getline(FP, tmp); this->TestData.imageFile = tmp;
 
-		std::filesystem::path path(this->FileName);
 		// GP::out << "localFilePath: " << localFilePath << "\n";
-		std::filesystem::path baseDir = path.parent_path();
+		std::filesystem::path baseDir = this->FileName.parent_path();
 		// GP::out << "Base directory determined: " << baseDir << "\n";
 
 		// State before adjustments
@@ -721,10 +729,10 @@ void NeuralNet::readFile()
 		// GP::out << "Original TestData.labelFile: " << this->TestData.labelFile << "\n";
 		// GP::out << "Original TestData.imageFile: " << this->TestData.imageFile << "\n";
 		// GP::out << std::endl
-		this->TrainingData.labelFile = ((std::filesystem::path)(baseDir/this->TrainingData.labelFile)).string();
-		this->TrainingData.imageFile = ((std::filesystem::path)(baseDir/this->TrainingData.imageFile)).string();
-		this->TestData.labelFile = ((std::filesystem::path)(baseDir/this->TestData.labelFile)).string();
-		this->TestData.imageFile = ((std::filesystem::path)(baseDir/this->TestData.imageFile)).string();
+		this->TrainingData.labelFile = baseDir / this->TrainingData.labelFile;
+		this->TrainingData.imageFile = baseDir / this->TrainingData.imageFile;
+		this->TestData.labelFile = baseDir / this->TestData.labelFile;
+		this->TestData.imageFile = baseDir / this->TestData.imageFile;
 
 
 		// State before adjustments
@@ -811,11 +819,11 @@ void NeuralNet::trainingSetup(bool setRandomWB)
 	if (this->trainImgDataFP && this->trainImgDataFP->is_open())
 		this->trainImgDataFP->close();
 
-	string localTrainLblDataFP = string(this->TrainingData.labelFile);
+	string localTrainLblDataFP = this->TrainingData.labelFile.string();
 	correctFilePathForTarget(localTrainLblDataFP);
 	this->trainLblDataFP = std::make_unique<FileObjHandle>(HEADER_NOT_NEEDED, localTrainLblDataFP, INPUT_BIN_FILE_MODE );
 
-	string localTrainImgDataFP = string(this->TrainingData.imageFile);
+	string localTrainImgDataFP = this->TrainingData.imageFile.string();
 	correctFilePathForTarget(localTrainImgDataFP);
 	this->trainImgDataFP = std::make_unique<FileObjHandle>(HEADER_NOT_NEEDED, localTrainImgDataFP, INPUT_BIN_FILE_MODE );
 
@@ -1221,7 +1229,7 @@ void NeuralNet::userInteractiveTraining(NeuralNetLabState_t& nnls)
 
 				if (nnls.trainingResultFlush && directoryExists(nnls.getAndCreateProcessingResultPath()))
 				{                            
-					const auto results = std::filesystem::path(nnls.getProcessingResultPath()) / NeuralNet::trainingRecordFilename(); 
+					const auto results = nnls.getProcessingResultPath() / NeuralNet::trainingRecordFilename(); 
 					auto outputfile = FileObjOutputAppendHandle(HEADER_SETUP(defaultHeaderSetupCallback), results, BIN_FILE_MODE );
 					if (outputfile)
 					{
@@ -1269,7 +1277,7 @@ void NeuralNet::userInteractiveTraining(NeuralNetLabState_t& nnls)
 			{
 				this->avgCost(tr);
 				nnls.currentCost = this->Cost;
-				this->avgWBCosts(tr);
+				this->avgWBCosts(tr, nnls.currentEta);
 				this->applyGrad();
 				this->BatchesCompleted++;
 			}
@@ -1340,11 +1348,11 @@ void NeuralNet::testingSetup()
 	}
 
 
-	string localTestLblDataFP = string(this->TestData.labelFile);
+	string localTestLblDataFP = this->TestData.labelFile.string();
 	correctFilePathForTarget(localTestLblDataFP);
 	this->testLblDataFP = std::make_unique<FileObjHandle>(HEADER_NOT_NEEDED, localTestLblDataFP, INPUT_BIN_FILE_MODE );
 
-	string localTestImgDataFP = string(this->TestData.imageFile);
+	string localTestImgDataFP = this->TestData.imageFile.string();
 	correctFilePathForTarget(localTestImgDataFP);
 	this->testImgDataFP = std::make_unique<FileObjHandle>(HEADER_NOT_NEEDED, localTestImgDataFP, INPUT_BIN_FILE_MODE );
 
@@ -1531,7 +1539,7 @@ void NeuralNet::userInteractiveTesting(NeuralNetLabState_t& nnls)
 
 			if (nnls.testingResultFlush && directoryExists(nnls.getAndCreateProcessingResultPath()))
 			{                            
-				const auto results = std::filesystem::path(nnls.getProcessingResultPath()) / NeuralNet::testingRecordFilename(); 
+				const auto results = nnls.getProcessingResultPath() / NeuralNet::testingRecordFilename(); 
 				auto outputfile = FileObjOutputAppendHandle(HEADER_SETUP(defaultHeaderSetupCallback), results, BIN_FILE_MODE );
 				if (outputfile)
 				{
@@ -1686,7 +1694,7 @@ Matrix NeuralNet::quadratic_partialderiv(const Matrix& Y, const Matrix& A)
 
 NeuralNet::NeuralNet(const NeuralNetParams_t& nnp) : process(this)
 {
-	const string& 				filename 	= nnp.filename;
+	const std::filesystem::path& filename 	= nnp.filename;
 	std::vector<size_t> 		layerSzs 	= nnp.layerSizes;
 	const size_t& 				batchsz 	= nnp.batchSize;
 	const int& 					numbatches 	= nnp.numBatches;
@@ -1697,12 +1705,9 @@ NeuralNet::NeuralNet(const NeuralNetParams_t& nnp) : process(this)
 	const CostFunction& 		cf 			= nnp.costFunction;
 
 	if (
-		layerSzs.size() >= AP_MinNumLayer && 
-		layerSzs.size() <= AP_MaxNumLayer && 
-		batchsz >= AP_MinBatchSize &&
-		batchsz <= AP_MaxBatchSize &&
-		eta >= AP_MinEta &&
-		eta <= AP_MaxEta
+		isValidNumLayer(layerSzs.size()) && 
+		isValidBatchSize(batchsz) && 
+		isValidEta(eta)
 		)
 	{
 		
@@ -1738,7 +1743,7 @@ NeuralNet::NeuralNet(const NeuralNetParams_t& nnp) : process(this)
 			auto costGradLength = size_t{ 0 };
 			for (const auto& size : layerSzs)
 			{
-				if (size > AP_MaxLayerSize || size < AP_MinLayerSize)
+				if (!isValidLayerSize(size))
 				{
 					ErrorHandler::FatalError(string(string("INVALID LAYER SIZE") + std::to_string(size)));
 					break;
@@ -1793,7 +1798,7 @@ NeuralNet::NeuralNet(const NeuralNetParams_t& nnp) : process(this)
 	}
 }
 
-NeuralNet::NeuralNet(const string& filename, NeuralNetParams_t& nnp) : process(this)
+NeuralNet::NeuralNet(const std::filesystem::path& filename, NeuralNetParams_t& nnp) : process(this)
 {
 	{
 		std::unique_lock lock(this->accessMutex);
@@ -1829,6 +1834,41 @@ NeuralNet::NeuralNet(const string& filename, NeuralNetParams_t& nnp) : process(t
 		nnp.disableInitialWBRandomization = false;
 	}
 	GP::out << "\nNeural Net successfully loaded from file!" << std::endl;
+}
+
+bool NeuralNet::isValidLayerSize(const size_t& layerSize)
+{
+	return ((layerSize >= AP_MinLayerSize) && (layerSize <= AP_MaxLayerSize));
+}
+
+bool NeuralNet::isValidNumLayer(const size_t& numLayer)
+{
+	return ((numLayer >= AP_MinNumLayer) && (numLayer <= AP_MaxNumLayer));
+}
+
+bool NeuralNet::isValidBatchSize(const size_t& batchSize)
+{
+	return ((batchSize >= AP_MinBatchCount) && (batchSize <= AP_MaxBatchCount));
+}
+
+bool NeuralNet::isValidStepSize(const size_t& stepSize)
+{
+	return ((stepSize >= AP_MinStepSize) && (stepSize <= AP_MaxStepSize));
+}
+
+bool NeuralNet::isValidEpochCount(const size_t& epochCount)
+{
+	return ((epochCount >= AP_MinEpochCount) && (epochCount <= AP_MaxEpochCount));
+}
+
+bool NeuralNet::isValidBatchCount(const int& batchNum)
+{
+	return ((batchNum == AP_AllBatchesSentinel) || ((batchNum >= AP_MinBatchCount) && (batchNum <= AP_MaxBatchCount)));
+}
+
+bool NeuralNet::isValidEta(const double& eta)
+{
+	return (std::isfinite(eta) && ((eta >= AP_MinEta) && (eta <= AP_MaxEta)));
 }
 
 void NeuralNetLabState_t::setCurrentTrainingResults(size_t idx, const ProcessingRecord_t& rec)
@@ -1886,17 +1926,17 @@ void NeuralNetLabState_t::updateTestingResultIdx(size_t idx)
 	this->testingResultsIdx = idx;
 }
 
-void NeuralNetLabState_t::setProcessingResultPath(const string& path)
+void NeuralNetLabState_t::setProcessingResultPath(const std::filesystem::path& path)
 {
 	this->processingResultPath = path;
 }
 
-const string& NeuralNetLabState_t::getProcessingResultPath() const
+const std::filesystem::path& NeuralNetLabState_t::getProcessingResultPath() const
 {
 	return (this->processingResultPath);
 }
 
-const string& NeuralNetLabState_t::getAndCreateProcessingResultPath()
+const std::filesystem::path& NeuralNetLabState_t::getAndCreateProcessingResultPath()
 {
 
 	// Check if the directories exist, and create them if necessary

@@ -41,7 +41,7 @@ enum class ProcessingRecordDisplayCfg_T { inputImage = 0, outputActivations = 1,
 static constexpr const char* ProcessingRecordDisplayCfgStrs[ECBR_EcTy(ProcessingRecordDisplayCfg_T,max)] = {"inputImage", "outputActivations"};
 
 struct NeuralNetParams_t {
-    string filename;
+    std::filesystem::path filename;
     std::vector<size_t> layerSizes;
     size_t batchSize;
     int numBatches;
@@ -90,7 +90,7 @@ public:
 
 	enum class ProcessingTypes { None = 0, Training = 1, Testing = 2, Any = 3 };
 private:
-	string FileName;
+	std::filesystem::path FileName;
 
 	mnistFileInfo TrainingData;
 	mnistFileInfo TestData;
@@ -184,14 +184,28 @@ protected:
 	void headerSetupWriteCallback(HeaderStatus& status, HeaderBuffer_t& header) const;
 public:
 	//These constants create boundaries for the program so the user can't jack things up
-	const size_t	AP_MinLayerSize = 1;
-	const size_t	AP_MaxLayerSize = 2000;
-	const size_t	AP_MinNumLayer = 1;
-	const size_t	AP_MaxNumLayer = 12;
-	const double	AP_MinEta = 0.000000000000000000000000001;
-	const double	AP_MaxEta = 200000;
-	const size_t	AP_MinBatchSize = 1;
-	const size_t	AP_MaxBatchSize = 60000;
+	static constexpr size_t	AP_MinLayerSize = 1;
+	static constexpr size_t	AP_MaxLayerSize = 2000;
+	static constexpr size_t	AP_MinNumLayer = 1;
+	static constexpr size_t	AP_MaxNumLayer = 12;
+	static constexpr double	AP_MinEta = 0.0000000000000000000000001;
+	static constexpr double	AP_MaxEta = 200000;
+	static constexpr int	AP_MinBatchCount = 1;
+	static constexpr int	AP_MaxBatchCount = 60000;
+	static constexpr int	AP_AllBatchesSentinel = -1;
+	static constexpr size_t	AP_MinStepSize = 1;
+	static constexpr size_t	AP_MaxStepSize = 60000;
+	static constexpr size_t	AP_MinEpochCount = 1;
+	static constexpr size_t	AP_MaxEpochCount = 60000;
+
+
+	static bool isValidLayerSize(const size_t& layerSize);
+	static bool isValidNumLayer(const size_t& numLayer);
+	static bool isValidBatchSize(const size_t& batchSize);
+	static bool isValidStepSize(const size_t& stepSize);
+	static bool isValidEpochCount(const size_t& epochCount);
+	static bool isValidBatchCount(const int& batchNum);
+	static bool isValidEta(const double& eta);
 
 	static double quadratic(const Matrix&, const Matrix&);
 	static Matrix quadratic_partialderiv(const Matrix&, const Matrix&);
@@ -203,7 +217,7 @@ public:
 
 	NeuralNet() = delete;
 	NeuralNet(const NeuralNetParams_t&);
-	NeuralNet(const string&, NeuralNetParams_t&);
+	NeuralNet(const std::filesystem::path&, NeuralNetParams_t&);
 	NeuralNet (const NeuralNet&) = delete;
 	NeuralNet(NeuralNet&&) = delete;
 	NeuralNet& operator=(const NeuralNet&) = delete;
@@ -211,8 +225,8 @@ public:
 
 	void verifyFiles();
 
-	string getFileName() const; 
-	void setFileName(const string&);
+	std::filesystem::path getFileName() const;
+	void setFileName(const std::filesystem::path&);
 	const Matrix& getInputLayer() const;
 	void getInputLayerDims(int& width, int& height) const;
 	const std::vector<Layer>& getLayers() const;
@@ -246,7 +260,7 @@ public:
 	void resetCost();
 	void resetWBCostGrad();
 	void addWBCosts();
-	void avgWBCosts(const size_t&);
+	void avgWBCosts(const size_t&, const double overrideEta = 0.0);
 	void applyGrad();
 
 	void printInputs() const;
@@ -342,15 +356,15 @@ private:
     resultsStorage_t 	testingResults							= {};
 	size_t				trainingResultsIdx						= 0;
 	size_t				testingResultsIdx						= 0;
-	string				processingResultPath					= string("");
+	std::filesystem::path processingResultPath;
 
 	void updateTrainingResultIdx(size_t idx);
 	void updateTestingResultIdx(size_t idx);
 
 public:
-	void setProcessingResultPath(const string&);
-	const string& getProcessingResultPath() const;
-	const string& getAndCreateProcessingResultPath();
+	void setProcessingResultPath(const std::filesystem::path&);
+	const std::filesystem::path& getProcessingResultPath() const;
+	const std::filesystem::path& getAndCreateProcessingResultPath();
 
 	void setCurrentTrainingResults(size_t, const ProcessingRecord_t&); 
 	void setCurrentTestingResults(size_t, const ProcessingRecord_t&); 
@@ -468,7 +482,7 @@ public:
 	int 											statViewerSelect 						= 0;
 #if (DEBUG_NN_STATE_RECORDER)				
 	bool 											record 									= false;
-	string 											recordingPath 							= string("");
+	std::filesystem::path recordingPath;
 #endif	
 	bool 											playback								= false;
 	float 											playbackSpeed							= 1.00f;

@@ -90,9 +90,8 @@ void NNStateRecorder::setLayer(size_t idx)
     this->layerIdx=idx;
 }
 
-void NNStateRecorder::setNNetFile(string file)
+void NNStateRecorder::setNNetFile(const std::filesystem::path& file)
 {
-    //GP::out << "\nRecorder setup file: " + file << std::endl;
     this->fileName=file;
 }
 

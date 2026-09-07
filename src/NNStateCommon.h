@@ -44,4 +44,3 @@ bool isValidNNStateType(nnStateType type);
 nnStateType getNNTypeFromStr(string type);
 string getNNTypeStr(nnStateType type);
 #define isLayerType(type) ( ECBR_ValTy( nnStateType, type ) > ECBR_EcTy( nnStateType, eMaxNonLayer ) )
-

@@ -51,7 +51,7 @@ class NNStateRecorder
 {
 private:
     bool recording = false;
-    string fileName;
+    std::filesystem::path fileName;
     nnOpInfo opInfo;
     nnStateType currentTarget; //This might otherwise be names which-part-of-the-NN-are-we-currently-recording
     size_t layerIdx;
@@ -80,7 +80,7 @@ protected:
     static void recordOperandB(const Matrix& operandB);
 public:
     std::filesystem::path getRecordRootPath() const;
-    void setNNetFile(string);
+    void setNNetFile(const std::filesystem::path&);
     void setOpInfo(nnOpInfo);
     void setTarget(nnStateType);
     void setLayer(size_t);
